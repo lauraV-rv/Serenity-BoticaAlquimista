@@ -1,7 +1,7 @@
 # La Botica del Alquimista · Automatización Front-End con Serenity BDD
 
-Taller 2 de Pruebas Front-End. Este proyecto automatiza la historia de usuario **HU-01: Compra en La Botica del Alquimista**
-(<https://boticaalquimista.onrender.com/>) con **Java 17, Serenity BDD, Cucumber y el patrón Screenplay**. Las pruebas se
+Este proyecto automatiza la historia de usuario **HU-01: Compra en La Botica del Alquimista**
+(<https://boticaalquimista.onrender.com/>) con **Java, Serenity BDD, Cucumber y el patrón Screenplay**. Las pruebas se
 ejecutan en **GitHub Actions** y cada escenario queda vinculado a un **issue** (caso de prueba) dentro de un **GitHub Project**.
 
 | | |
@@ -159,9 +159,6 @@ Escenario: Aplicar el cupon LUNA10 escrito en minusculas
   Y el descuento deberia ser de "-$8.400"
 ```
 
-> Los textos de los pasos se escribieron **sin tildes** para que la consola de Windows los muestre bien. Solo conservan
-> tilde los datos entre comillas que deben coincidir con lo que muestra la aplicación (por ejemplo "Poción de Invisibilidad"
-> o "Cupón no válido").
 
 ## 6. Estrategia de localizadores
 
@@ -184,23 +181,7 @@ Decisiones importantes:
 - **Serenity decide si un localizador es XPath o CSS intentando compilarlo como XPath.** `input[name='correo']` también es
   XPath válido (aunque no encuentra nada), por eso los selectores por atributo se escriben sin etiqueta: `[name='correo']`.
 
-## 7. Cómo ejecutar las pruebas en local
 
-**Requisitos:** JDK 17 o 21, Google Chrome actualizado, IntelliJ IDEA (o VS Code).
-
-1. Abrir la carpeta del proyecto en IntelliJ (*File → Open*) y esperar a que Gradle sincronice.
-2. **Desde el Runner:** clic derecho en `src/test/java/botica/runners/Runner.java` → *Run 'Runner'*. Serenity abre Chrome,
-   llena los campos, hace clic, cierra la ventana y muestra el resultado en verde.
-3. **Desde la terminal** (en PowerShell, el parámetro `-D...` va entre comillas):
-
-```powershell
-.\gradlew.bat clean test                                          # los 20 escenarios (Chrome visible)
-.\gradlew.bat clean test "-Dcucumber.filter.tags=@Issue-1"        # un solo issue
-.\gradlew.bat clean test "-Dcucumber.filter.tags=@req_cupones"    # un requisito
-.\gradlew.bat clean test "-Denvironment=headless"                 # sin ventana, como en GitHub Actions
-```
-
-En Linux o macOS: `./gradlew clean test -Dcucumber.filter.tags="@Issue-1"`.
 
 4. **Reporte:** abrir `target/site/serenity/index.html`. Muestra los escenarios por requisito, cada paso narrado
    ("Alquimista aplica el cupón luna10") y las capturas de pantalla de cada acción.
@@ -208,23 +189,9 @@ En Linux o macOS: `./gradlew clean test -Dcucumber.filter.tags="@Issue-1"`.
 Cada escenario abre un navegador nuevo (`serenity.restart.browser.for.each = scenario`): la tienda guarda la sesión, el
 carrito y el stock en el `localStorage` del navegador, así que ningún escenario depende de otro.
 
-## 8. GitHub: repositorio, pipeline y trazabilidad
+## 7. GitHub: repositorio, pipeline y trazabilidad
 
-### 8.1 Repositorio
-
-```powershell
-git init
-git add .
-git commit -m "Automatizacion HU-01 La Botica del Alquimista con Serenity BDD"
-git branch -M main
-git remote add origin https://github.com/<usuario>/<repositorio>.git
-git push -u origin main
-```
-
-En *Settings → Actions → General → Workflow permissions* se marca **Read and write permissions**, para que el pipeline
-pueda comentar y etiquetar los issues.
-
-### 8.2 Pipeline (GitHub Actions)
+### 7.1 Pipeline (GitHub Actions)
 
 `.github/workflows/ci.yml` configura Java 17, instala las dependencias con Gradle y ejecuta en **headless**:
 
@@ -247,44 +214,9 @@ Al terminar:
 - Si el tag no selecciona ningún escenario (por ejemplo, mal escrito), el pipeline falla en lugar de quedar en verde con 0 pruebas.
 - Se publican los artefactos `reporte-serenity-<n>` (reporte HTML) y `resultados-pruebas-<n>` (cucumber.json y reportes de Gradle).
 
-### 8.3 Project e issues (TestCases)
 
-1. Crear un **GitHub Project** (*Projects → New project*) y vincularlo al repositorio (*Projects → Link a project*).
-2. Instalar GitHub CLI (<https://cli.github.com>) y autenticarse:
-   ```powershell
-   gh auth login
-   gh auth refresh -s project
-   ```
-3. Crear los 20 issues:
-   ```powershell
-   .\crear-issues.ps1 -Simular                                        # muestra qué va a crear
-   .\crear-issues.ps1 -Repo "<usuario>/<repositorio>" -Proyecto <N>   # los crea y los agrega al Project
-   ```
-   Si Windows bloquea el script: `powershell -ExecutionPolicy Bypass -File .\crear-issues.ps1 ...`
 
-Cada issue se titula `[@Issue-N] <nombre del escenario>` y lleva:
-
-- Etiquetas `test-case`, `HU-01`, el requisito (`req_login`, `req_catalogo`, `req_carrito`, `req_cupones`, `req_pago`) y `positivo` o `negativo`.
-- En el cuerpo: criterio de aceptación, tipo de prueba, tags, el escenario Gherkin y cómo ejecutarlo.
-- Si el script se ejecuta dos veces, no duplica issues.
-
-Así queda la trazabilidad completa: **requisito (`@req_...`) → escenario Gherkin → issue (`@Issue-N`) → resultado del pipeline (`status:passed`)**.
-
-## 9. Ajustes sobre la plantilla base
-
-- **`build.gradle`**
-  - Se agregó `junit-vintage-engine`: Gradle usa JUnit Platform y el Runner es de JUnit 4. Sin ese motor, Gradle no
-    encuentra el Runner y no ejecuta ningún escenario.
-  - `serenity-junit` se alineó a 4.2.32, igual que el resto de Serenity (la guía pide la misma versión para todo).
-  - Compilación en UTF-8, para que los textos con tilde de la aplicación se lean bien en Windows.
-- **`serenity.conf`**
-  - Entorno `chrome` (por defecto, con ventana) y entorno `headless` (para GitHub Actions).
-  - Ventana de 1920×1080 y un navegador nuevo por escenario.
-- **`serenity.properties`**: colores en consola y codificación UTF-8 de los `.feature`.
-- **`.gitignore`**: sí se suben `gradlew`, `gradlew.bat` y `gradle/wrapper/gradle-wrapper.jar`, que el pipeline necesita.
-
-## 10. Hallazgos en la aplicación
-
+## 8. Hallazgos en la aplicación
 Durante el análisis aparecieron dos comportamientos que **no cumplen** los criterios de la HU-01. No hacen parte de los
 20 escenarios (que pasan), pero quedan documentados como defectos encontrados:
 
