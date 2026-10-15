@@ -1,0 +1,119 @@
+name: Pruebas Front-End - La Botica del Alquimista
+
+# Formas de ejecutar el pipeline:
+#  1) Manual (Actions > este workflow > Run workflow) indicando el tag: @Issue-1, @req_cupones, @HU-01...
+#  2) Desde el issue (TestCase): comentar /ejecutar en un issue cuyo titulo contenga [@Issue-N].
+#  3) Automatico en cada push / pull request a main: corre toda la HU-01.
+# Al terminar, el resultado de cada escenario se publica en su issue (comentario + etiqueta)
+# y en el resumen de la ejecucion ("Resultados por issue").
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de Cucumber a ejecutar (ej. @Issue-1, @req_login, @HU-01)"
+        required: true
+        default: "@HU-01"
+        type: string
+      publicarEnIssues:
+        description: "Comentar el resultado en los issues vinculados (@Issue-N)"
+        required: false
+        default: true
+        type: boolean
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pruebas-serenity:
+    name: Serenity BDD (${{ inputs.tag || 'HU-01 / issue' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Desde un issue: solo si el comentario empieza por /ejecutar y lo escribe alguien del repositorio
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request == null &&
+       startsWith(github.event.comment.body, '/ejecutar') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+
+    steps:
+      - name: Determinar el tag a ejecutar
+        id: tag
+        env:
+          EVENTO: ${{ github.event_name }}
+          TAG_MANUAL: ${{ inputs.tag }}
+          TITULO_ISSUE: ${{ github.event.issue.title }}
+        run: |
+          case "$EVENTO" in
+            workflow_dispatch) TAG="$TAG_MANUAL" ;;
+            issue_comment)     TAG=$(echo "$TITULO_ISSUE" | grep -oE '@Issue-[0-9]+' | head -n 1 || true) ;;
+            *)                 TAG="@HU-01" ;;
+          esac
+          if [ -z "$TAG" ]; then
+            echo "::error::No se encontro un tag para ejecutar (el titulo del issue debe contener [@Issue-N])."
+            exit 1
+          fi
+          echo "Tag a ejecutar: $TAG"
+          echo "valor=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Dar permiso de ejecucion a gradlew
+        run: chmod +x gradlew
+
+      - name: Instalar dependencias
+        run: ./gradlew dependencies --configuration testRuntimeClasspath --quiet > /dev/null
+
+      - name: Ejecutar escenarios ${{ steps.tag.outputs.valor }}
+        env:
+          TAG: ${{ steps.tag.outputs.valor }}
+        # headless: el servidor de GitHub no tiene pantalla
+        run: ./gradlew clean test -Dcucumber.filter.tags="$TAG" -Denvironment=headless
+
+      - name: Publicar resultados por issue
+        if: always() && steps.tag.outputs.valor != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL_EJECUCION: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # En push/PR solo se escribe el resumen; en ejecucion manual o desde el issue tambien se comenta en los issues
+          MODO: ${{ (github.event_name == 'issue_comment' || (github.event_name == 'workflow_dispatch' && inputs.publicarEnIssues)) && 'completo' || '--solo-resumen' }}
+        run: |
+          chmod +x .github/scripts/publicar-resultados.sh
+          if [ "$MODO" = "completo" ]; then
+            .github/scripts/publicar-resultados.sh target/cucumber-reports/cucumber.json
+          else
+            .github/scripts/publicar-resultados.sh target/cucumber-reports/cucumber.json --solo-resumen
+          fi
+
+      - name: Publicar reporte de Serenity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-serenity-${{ github.run_number }}
+          path: target/site/serenity
+          if-no-files-found: warn
+
+      - name: Publicar resultados de Cucumber y Gradle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas-${{ github.run_number }}
+          path: |
+            target/cucumber-reports
+            build/reports/tests/test
+            build/test-results/test
+          if-no-files-found: warn

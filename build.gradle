@@ -1,0 +1,53 @@
+plugins {
+    id 'java'
+    id 'net.serenity-bdd.serenity-gradle-plugin' version '4.2.32'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+// Se compila siempre en UTF-8 para que los textos de la aplicacion (con tildes) se lean bien
+// en Windows, donde el valor por defecto es Cp1252.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.14.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.14.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // Permite que JUnit Platform ejecute el Runner de JUnit 4 (@RunWith(CucumberWithSerenity.class))
+    testImplementation 'org.junit.vintage:junit-vintage-engine:5.14.0'
+
+    // Todas las dependencias de Serenity en la misma version (4.2.32)
+    testImplementation 'net.serenity-bdd:serenity-junit:4.2.32'
+    implementation 'net.serenity-bdd:serenity-core:4.2.32'
+    implementation 'net.serenity-bdd:serenity-cucumber:4.2.32'
+    implementation 'net.serenity-bdd:serenity-screenplay:4.2.32'
+    implementation 'net.serenity-bdd:serenity-screenplay-webdriver:4.2.32'
+    implementation("org.seleniumhq.selenium:selenium-java:4.38.0")
+
+    // WebDriver
+    testImplementation 'org.seleniumhq.selenium:selenium-java:4.15.0'
+    testImplementation 'org.seleniumhq.selenium:selenium-chrome-driver:4.15.0'
+    testImplementation 'org.seleniumhq.selenium:selenium-edge-driver:4.15.0'
+    testImplementation 'org.seleniumhq.selenium:selenium-firefox-driver:4.15.0'
+
+}
+
+test {
+    useJUnitPlatform()
+    test.finalizedBy(aggregate)
+    // Pasar propiedades del sistema a los tests (ej. -Dcucumber.filter.tags="@Issue-1")
+    systemProperties = System.properties
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+}
